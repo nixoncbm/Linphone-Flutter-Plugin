@@ -33,6 +33,7 @@ public class EventChannelHelper {
 
     public synchronized void error(String errorCode, String errorMessage, Object errorDetails) {
         if (eventSink == null) return;
+        //error
         handler.post(() -> eventSink.error(errorCode, errorMessage, errorDetails));
     }
 

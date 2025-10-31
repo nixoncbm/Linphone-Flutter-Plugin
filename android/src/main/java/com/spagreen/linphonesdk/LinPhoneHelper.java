@@ -54,7 +54,7 @@ public class LinPhoneHelper {
         factory.setDebugMode(true, "LinPhoneSDKTest");
         core = factory.createCore(null, null, context);
 
-        TransportType transportType = TransportType.Udp;
+        TransportType transportType = TransportType.Tls;
         AuthInfo authInfo = Factory.instance().createAuthInfo(userName, null, password, null, null, domain, null);
         AccountParams params = core.createAccountParams();
 
@@ -85,22 +85,63 @@ public class LinPhoneHelper {
         core.start();
     }
 
-    public void call(String number) {
+    public void logout() {
         if (core == null) return;
-        String formattedNumber = String.format("sip:%s@%s", number, domain);
-        Address remoteAddress = Factory.instance().createAddress(formattedNumber);
-        if (remoteAddress == null) return;
+
+        // Obtener la cuenta por defecto
+        Account account = core.getDefaultAccount();
+        if (account == null) return;
+
+        // Tomar los params actuales (const) y clonar para poder modificarlos
+        AccountParams params = account.getParams();
+        AccountParams clonedParams;
+        try {
+            clonedParams = params.clone();   // en v5 suele estar disponible
+        } catch (Throwable t) {
+            // Si tu binding no expone clone(), usa directamente params (si es mutable en tu versión)
+            clonedParams = params;
+        }
+
+        // Deshabilitar el registro (REGISTER con Expires: 0)
+        clonedParams.setRegisterEnabled(false);
+
+        // Aplicar los nuevos parámetros a la cuenta
+        account.setParams(clonedParams);
+    }
+
+    public void call(String input) {
+        if (core == null || input == null) return;
+
+        String trimmed = input.trim();
+        if (trimmed.isEmpty()) return;
+
+        String uri;
+        // Si ya viene con dominio/URI completa, respétala
+        if (trimmed.contains("@") || trimmed.startsWith("sip:") || trimmed.startsWith("sips:")) {
+            uri = trimmed.startsWith("sip:") || trimmed.startsWith("sips:")
+                    ? trimmed
+                    : "sip:" + trimmed;
+        } else {
+            // Extensión interna → usar tu dominio
+            uri = "sip:" + trimmed + "@" + domain;  // p.ej. domain = "sip.linphone.org"
+        }
+
+        // (Opcional) forzar transporte si hace falta:
+        // if (!uri.contains(";transport=")) uri = uri + ";transport=udp";
+
+        Address remote = Factory.instance().createAddress(uri);
+        if (remote == null) {
+            Log.e("LinPhone", "URI SIP inválida: " + uri);
+            return;
+        }
+
         CallParams params = core.createCallParams(null);
         if (params == null) return;
 
-        // We can now configure it
-        // Here we ask for no encryption but we could ask for ZRTP/SRTP/DTLS
-        params.setMediaEncryption(MediaEncryption.SRTP);
-        // If we wanted to start the call with video directly
-        //params.enableVideo(true)
+        params.setMediaEncryption(MediaEncryption.SRTP); // o DTLS/ZRTP si tu server lo soporta
         params.enableAudio(true);
-        // Finally we start the call
-        core.inviteAddressWithParams(remoteAddress, params);
+
+        core.inviteAddressWithParams(remote, params);
     }
 
     public boolean callForward(String destination) {
@@ -136,14 +177,21 @@ public class LinPhoneHelper {
 
 
     public void hangUp() {
-        if (core.getCallsNb() == 0) return;
+        if (core.getCallsNb() == 0) {
+            Log.e(TAG, "--------------hangUp 1: " + core.getCallsNb());
+            return;
+        }
         Call call = null;
         if (core.getCurrentCall() != null) {
             call = core.getCurrentCall();
         } else {
             call = core.getCalls()[0];
         }
+        Log.e(TAG, "--------------hangUp 2: " + (call == null));
+        core.terminateAllCalls();
         if (call == null) return;
+
+        Log.e(TAG, "--------------hangUp 2: " + (call));
         call.terminate();
         callEventListener.success("Released");
     }
@@ -283,4 +331,42 @@ public class LinPhoneHelper {
             }
         }
     };
+
+    public boolean hasAnyCall() {
+        return core != null && core.getCallsNb() > 0;
+    }
+
+    public Call getCurrentOrFirstCall() {
+        if (core == null) return null;
+        Call cur = core.getCurrentCall();
+        if (cur != null) return cur;
+        Call[] all = core.getCalls();
+        return (all != null && all.length > 0) ? all[0] : null;
+    }
+
+    public boolean isCallOngoing() {
+        Call call = getCurrentOrFirstCall();
+        if (call == null) return false;
+        Call.State s = call.getState();
+        // Considera “en curso” conectadas, en progreso, en espera, etc.
+        switch (s) {
+            case OutgoingInit:
+            case OutgoingProgress:
+            case OutgoingRinging:
+            case OutgoingEarlyMedia:
+            case IncomingReceived:
+            case IncomingEarlyMedia:
+            case Connected:
+            case StreamsRunning:
+            case Paused:
+            case PausedByRemote:
+            case Updating:
+            case UpdatedByRemote:
+            case EarlyUpdatedByRemote:
+                return true;
+            default:
+                return false; // Idle, Released, Error, End, etc.
+        }
+    }
+
 }

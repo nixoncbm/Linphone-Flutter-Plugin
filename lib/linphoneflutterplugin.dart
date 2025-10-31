@@ -28,6 +28,11 @@ class LinphoneFlutterPlugin {
     return await _channel.invokeMethod("login", data);
   }
 
+
+  Future<void> logout() async {
+    return await _channel.invokeMethod("logout");
+  }
+
   Future<void> toggleSpeaker() async {
     return await _channel.invokeMethod("toggle_speaker");
   }

@@ -43,6 +43,11 @@ public class MethodChannelHandler extends FlutterActivity implements MethodChann
                 linPhoneHelper.login(userName, domain, password);
                 result.success("Success");
                 break;
+
+            case "logout":
+                linPhoneHelper.logout();
+                result.success("Success");
+                break;
             case "remove_listener":
                 linPhoneHelper.removeLoginListener();
                 result.success(true);
@@ -58,6 +63,11 @@ public class MethodChannelHandler extends FlutterActivity implements MethodChann
             case "mute":
                 boolean isMuted = linPhoneHelper.toggleMute();
                 result.success(isMuted);
+                break;
+                
+            case "hasAnyCall":
+                boolean hasAnyCall = linPhoneHelper.hasAnyCall();
+                result.success(hasAnyCall);
                 break;
 
             case "call":
@@ -86,10 +96,6 @@ public class MethodChannelHandler extends FlutterActivity implements MethodChann
                             Manifest.permission.CAMERA,
                             Manifest.permission.USE_SIP,
                             Manifest.permission.RECORD_AUDIO,
-                            Manifest.permission.ACCESS_NETWORK_STATE,
-                            Manifest.permission.CHANGE_NETWORK_STATE,
-                            Manifest.permission.ACCESS_WIFI_STATE,
-                            Manifest.permission.CHANGE_WIFI_STATE,
                     };
                     boolean isSuccess = new Utils().checkPermissions(permissionArrays, activity);
                     if (isSuccess) {
